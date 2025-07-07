@@ -1,0 +1,156 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced OMR Sheet Analyzer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f3f4f6;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h2 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+    input[type="file"], button {
+      margin: 10px;
+      padding: 12px 18px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+    }
+    input[type="file"] {
+      background-color: #fff;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #007bff;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    canvas {
+      margin-top: 20px;
+      width: 100%;
+      max-width: 600px;
+      border: 1px solid #ddd;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 20px;
+      background: white;
+      max-width: 90vw;
+      margin-left: auto;
+      margin-right: auto;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: left;
+    }
+    @media (max-width: 600px) {
+      input, button {
+        width: 90%;
+        margin: 5px auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>Advanced OMR Sheet Analyzer</h2>
+  <input type="file" id="upload" accept="image/*">
+  <button onclick="analyze()">📊 Analyze</button>
+  <canvas id="canvas" width="800" height="1000"></canvas>
+  <div id="result"></div>  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    let imageData;
+
+    document.getElementById("upload").addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function getBubbleFillRatio(x, y, radius = 10) {
+      let filled = 0, total = 0;
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist <= radius) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && ny >= 0 && nx < imageData.width && ny < imageData.height) {
+              const index = (ny * imageData.width + nx) * 4;
+              const r = imageData.data[index];
+              const g = imageData.data[index + 1];
+              const b = imageData.data[index + 2];
+              const avg = (r + g + b) / 3;
+              if (avg < 180) filled++;
+              total++;
+            }
+          }
+        }
+      }
+      return filled / total;
+    }
+
+    function analyze() {
+      const resultDiv = document.getElementById("result");
+      if (!imageData) {
+        resultDiv.innerHTML = "<strong>⚠️ Please upload an image first.</strong>";
+        return;
+      }
+
+      const bubblePositions = [
+        [[112, 99], [157, 99], [202, 99], [247, 99]],
+        [[112, 140], [157, 140], [202, 140], [247, 140]],
+        [[112, 181], [157, 181], [202, 181], [247, 181]],
+        [[112, 222], [157, 222], [202, 222], [247, 222]],
+        [[112, 263], [157, 263], [202, 263], [247, 263]]
+      ];
+
+      let output = "<h3>📋 Results:</h3>";
+
+      bubblePositions.forEach((positions, qIndex) => {
+        let marks = positions.map((pos, i) => {
+          return { index: i, ratio: getBubbleFillRatio(pos[0], pos[1]) };
+        }).filter(item => item.ratio > 0.2);
+
+        if (marks.length === 1) {
+          output += `<p>Q${qIndex + 1}: ✅ Option ${String.fromCharCode(65 + marks[0].index)}</p>`;
+        }
+        else if (marks.length === 2) {
+          const diff = Math.abs(marks[0].ratio - marks[1].ratio);
+          if (diff >= 0.15) {
+            const selected = marks[0].ratio > marks[1].ratio ? marks[0] : marks[1];
+            output += `<p>Q${qIndex + 1}: ✅ Option ${String.fromCharCode(65 + selected.index)} (darker selected)</p>`;
+          } else {
+            output += `<p>Q${qIndex + 1}: ❌ Two similar marks — Invalid</p>`;
+          }
+        }
+        else if (marks.length >= 3) {
+          output += `<p>Q${qIndex + 1}: ❌ Multiple marks — Invalid</p>`;
+        }
+        else {
+          output += `<p>Q${qIndex + 1}: ❌ No mark detected</p>`;
+        }
+      });
+
+      resultDiv.innerHTML = output;
+    }
+  </script></body>
+</html>
